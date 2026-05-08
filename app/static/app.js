@@ -107,14 +107,20 @@ function renderMailboxes() {
         <div class="text-sm font-medium truncate">${escapeHtml(m.email)}</div>
         <div class="text-xs text-slate-500 truncate">${escapeHtml(m.last_status || m.label || m.client_id || "")}</div>
       </div>
+      <button title="复制邮箱" class="text-slate-300 hover:text-blue-600 text-sm shrink-0" data-copy="${m.id}">📋</button>
       <button title="删除" class="text-slate-300 hover:text-red-500 text-sm shrink-0" data-del="${m.id}">✕</button>`;
     li.addEventListener("click", (e) => {
-      if (e.target.closest("[data-del]")) return;
+      if (e.target.closest("[data-del]") || e.target.closest("[data-copy]")) return;
       state.currentId = m.id; state.messages = []; state.currentMsgId = null;
       renderMailboxes(); renderRight();
     });
     ul.appendChild(li);
   }
+  ul.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const mb = state.mailboxes.find(x => x.id === b.dataset.copy);
+    if (mb) copyToClipboard(effectiveEmail(mb));
+  }));
   ul.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", (e) => {
     e.stopPropagation();
     if (confirm("删除此邮箱？")) deleteMailbox(b.dataset.del);
@@ -332,6 +338,29 @@ function openModal(id) { $("#" + id).classList.remove("hidden"); }
 function closeModal(id) { $("#" + id).classList.add("hidden"); }
 
 // ---------- helpers ----------
+function effectiveEmail(mb) {
+  // 别名场景下拼成 user+alias@domain；否则原样返回
+  if (!mb || !mb.alias) return mb ? mb.email : "";
+  const at = mb.email.indexOf("@");
+  if (at <= 0) return mb.email;
+  return mb.email.slice(0, at) + "+" + mb.alias + mb.email.slice(at);
+}
+
+async function copyToClipboard(text, label) {
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // 老浏览器 / 非 HTTPS 降级
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch {}
+    document.body.removeChild(ta);
+  }
+  toast("已复制 " + (label || text), "success");
+}
+
 function escapeHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 }
@@ -384,9 +413,7 @@ function bind() {
   $("#btn-code").addEventListener("click", doCode);
   $("#btn-test-token").addEventListener("click", doTestToken);
   $("#btn-copy-code").addEventListener("click", () => {
-    const txt = $("#cur-code-text").textContent;
-    navigator.clipboard.writeText(txt);
-    toast("已复制 " + txt, "success");
+    copyToClipboard($("#cur-code-text").textContent);
   });
 
   $("#mb-search").addEventListener("input", renderMailboxes);
