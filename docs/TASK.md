@@ -81,6 +81,10 @@
   - 邮箱列表每项加 📋 图标，点击复制
   - 已填别名时复制为 `user+alias@domain`
   - 复用 `copyToClipboard()` 工具函数（验证码复制也接入），含老浏览器降级
+- ✅ **F14 静态资源自动刷新**（2026-05-08）
+  - HTML 注入 `?v=<hash>` 版本号到 app.js / style.css
+  - HTML 响应头 `Cache-Control: no-cache, no-store, must-revalidate`
+  - 部署新代码后用户下次打开自动拉新版，无需手动 Ctrl+F5
 - ⬜ 批量取码进度条（前端轮询 SSE 或 WebSocket）
 - ⬜ 邮箱列表支持拖拽排序、加标签
 - ⬜ 失败重试按钮（单条 / 批量）

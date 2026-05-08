@@ -9,15 +9,17 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -307,9 +309,46 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+def _asset_version() -> str:
+    """根据静态文件 mtime 生成版本哈希。文件变了哈希就变，浏览器自动拉新版。"""
+    try:
+        latest = 0.0
+        for f in STATIC_DIR.glob("*"):
+            if f.is_file():
+                m = f.stat().st_mtime
+                if m > latest:
+                    latest = m
+        if latest == 0.0:
+            latest = time.time()
+        return hashlib.md5(f"{latest:.0f}".encode()).hexdigest()[:8]
+    except Exception:
+        return str(int(time.time()))
+
+
+# 进程启动时计算一次（开发场景如需热更新可改成每次重新计算）
+ASSET_VERSION = _asset_version()
+log.info("asset version: %s", ASSET_VERSION)
+
+
 @app.get("/", include_in_schema=False)
-async def index() -> FileResponse:
-    return FileResponse(str(STATIC_DIR / "index.html"))
+async def index() -> Response:
+    """返回 index.html，并给 app.js / style.css 注入版本号 + 禁 HTML 缓存。
+
+    这样部署新代码后用户无需手动刷新，下一次自然访问就是新版。
+    """
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    html = html.replace('/static/app.js"', f'/static/app.js?v={ASSET_VERSION}"')
+    html = html.replace('/static/style.css"', f'/static/style.css?v={ASSET_VERSION}"')
+    return Response(
+        content=html,
+        media_type="text/html; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "X-Asset-Version": ASSET_VERSION,
+        },
+    )
 
 
 @app.exception_handler(Exception)
