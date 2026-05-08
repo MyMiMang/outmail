@@ -27,35 +27,50 @@ email----password----client_id----refresh_token
 - 文件夹切换：全部 / 收件箱 / 垃圾箱 / 收件箱+垃圾箱
 - token 测试：诊断 `client_id` + `refresh_token` 是否有效
 
-## 快速部署（Debian 12）
+## 部署模式
+
+仓库提供两套 compose 文件，按服务器情况二选一：
+
+| 模式 | 适用场景 | 文件 |
+|---|---|---|
+| **A. 复用宿主机 nginx**（推荐） | 服务器 80/443 已被 nginx / 宝塔 / 其他项目占用 | `docker-compose.yml` |
+| **B. 容器自带 Caddy 自动 HTTPS** | 服务器 80/443 是空的、想一条龙搞定 HTTPS | `docker-compose.caddy.yml` |
+
+### 模式 A：宿主机 nginx 反代（默认）
+
+webmail 只绑定 `127.0.0.1:8765`，与服务器其他容器项目和谐共存。
 
 ```bash
-# 1. 安装 Docker（如未安装）
-curl -fsSL https://get.docker.com | sh
+# 1. 拉代码
+git clone https://github.com/MyMiMang/outmail.git /opt/webmail
+cd /opt/webmail
 
-# 2. 拉代码到服务器
-git clone <你的仓库> /opt/webmail && cd /opt/webmail
-# 或者直接 scp 整个 webmail/ 目录上去
-
-# 3. 配置环境
+# 2. 配置
 cp .env.example .env
-nano .env
-#   ACCESS_PASSWORD=随便起一个强密码
-#   DOMAIN=mail.yourdomain.com    # 已解析到本服务器
-#   EMAIL=you@example.com
+nano .env            # 设置 ACCESS_PASSWORD（强烈建议）
 
-# 4. 启动
+# 3. 启动后端
 docker compose up -d --build
+docker compose logs -f       # 看到 "Uvicorn running" 即成功
 
-# 5. 查看日志
-docker compose logs -f
+# 4. 配 nginx 反代（参考 deploy/nginx-webmail.conf）
+sudo cp deploy/nginx-webmail.conf /etc/nginx/conf.d/webmail.conf
+sudo nano /etc/nginx/conf.d/webmail.conf   # 改 server_name
+sudo nginx -t && sudo systemctl reload nginx
+
+# 5. 申请证书（如需）
+sudo certbot --nginx -d mail.yourdomain.com
 ```
 
-域名解析到服务器后 Caddy 会自动申请 Let's Encrypt 证书，访问 `https://mail.yourdomain.com` 即可。
+### 模式 B：Caddy 自动 HTTPS
 
-### 仅内网 / IP 部署（无 HTTPS）
+```bash
+cp .env.example .env
+nano .env            # ACCESS_PASSWORD / DOMAIN=mail.xxx.com / EMAIL
+docker compose -f docker-compose.caddy.yml up -d --build
+```
 
-`.env` 留 `DOMAIN=:80` 即可，访问 `http://服务器IP/`。**这种情况下务必设置 `ACCESS_PASSWORD`**。
+域名解析到服务器后会自动申请 Let's Encrypt 证书。
 
 ## 接口（外部脚本也可用）
 

@@ -1,42 +1,19 @@
+# 仅启动 webmail 后端，绑定到 127.0.0.1:8765
+# 由宿主机现有 nginx 反代到对外域名（推荐做法，与服务器其他项目共存）
+#
+# 如果你的服务器 80/443 是空的，想用容器自带的 Caddy 自动 HTTPS，
+# 请改用 docker-compose.caddy.yml（仓库内附带）。
+
 services:
   webmail:
     build: .
     image: webmail:latest
     container_name: webmail
     restart: unless-stopped
-    expose:
-      - "8765"
+    ports:
+      - "127.0.0.1:8765:8765"   # 只绑定到宿主机回环，外网访问不到，由 nginx 反代
     environment:
-      # 留空表示无密码（任何人能访问 API），强烈建议在公网部署时设置一个强密码
       ACCESS_PASSWORD: "${ACCESS_PASSWORD:-}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-*}"
       LOG_LEVEL: "INFO"
       TZ: "Asia/Shanghai"
-    networks:
-      - webnet
-
-  caddy:
-    image: caddy:2.8-alpine
-    container_name: webmail-caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      DOMAIN: "${DOMAIN:-:80}"          # 设置成你的域名（如 mail.example.com）即可自动 HTTPS；留空 :80 仅 HTTP
-      EMAIL: "${EMAIL:-}"                # ACME 通知邮箱（可选）
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - webmail
-    networks:
-      - webnet
-
-volumes:
-  caddy_data:
-  caddy_config:
-
-networks:
-  webnet:
