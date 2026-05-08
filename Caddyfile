@@ -1,0 +1,32 @@
+# 域名通过环境变量 DOMAIN 注入：
+#   - 设置成 mail.example.com   -> Caddy 自动申请 Let's Encrypt 证书并启用 HTTPS
+#   - 设置成 :80                -> 仅 HTTP（仅适合内网 / 调试）
+#   - 不设置                     -> 默认 :80
+{$DOMAIN} {
+	encode zstd gzip
+
+	# 日志（默认输出到容器 stdout，可通过 docker logs 查看）
+	log {
+		output stdout
+		format console
+	}
+
+	# 反代到 FastAPI
+	reverse_proxy webmail:8765 {
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	# 安全响应头
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		# 邮件正文用 sandbox iframe 渲染，CSP 不能太严，这里给个温和默认
+		X-Frame-Options "SAMEORIGIN"
+	}
+
+	# Caddy 默认会在配置了真实域名时启用 HTTPS。
+	# 如需指定 ACME 邮箱：在 docker-compose.yml 的环境变量里设 EMAIL 后取消下行注释
+	# tls {$EMAIL}
+}
